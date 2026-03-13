@@ -80,6 +80,7 @@ public class UdfpsEnrollEnrollingView extends GlifLayout {
 
     private UdfpsEnrollView mUdfpsEnrollView;
     private View mHeaderView;
+    private TextView mSideSkipTextView;
     private AccessibilityManager mAccessibilityManager;
 
     private ObjectAnimator mHeaderScrollAnimator;
@@ -103,6 +104,7 @@ public class UdfpsEnrollEnrollingView extends GlifLayout {
         super.onFinishInflate();
         mHeaderView = findViewById(com.google.android.setupdesign.R.id.sud_landscape_header_area);
         mUdfpsEnrollView = findViewById(R.id.udfps_animation_view);
+        mSideSkipTextView = findViewById(R.id.side_skip_button);
     }
 
     @Override
@@ -283,13 +285,29 @@ public class UdfpsEnrollEnrollingView extends GlifLayout {
     }
 
     void setSecondaryButtonBackground(@ColorInt int color) {
+        final FooterBarMixin footerBarMixin = getMixin(FooterBarMixin.class);
+        final Button secondaryButtonView = footerBarMixin.getSecondaryButtonView();
+        if (secondaryButtonView == null) {
+            return;
+        }
+        if (!mIsLandscape && mSideSkipTextView != null
+                && getResources().getBoolean(R.bool.config_useLegacyUdfpsUi)) {
+            final LinearLayout buttonContainer = footerBarMixin.getButtonContainer();
+            mSideSkipTextView.setText(secondaryButtonView.getText());
+            mSideSkipTextView.setOnClickListener(v -> secondaryButtonView.callOnClick());
+            mSideSkipTextView.setVisibility(View.VISIBLE);
+            mSideSkipTextView.bringToFront();
+            if (buttonContainer != null) {
+                buttonContainer.setVisibility(View.GONE);
+            }
+            return;
+        }
+
         // Set the button background only when the button is not under udfps overlay to avoid UI
         // overlap.
         if (!mIsLandscape || mShouldUseReverseLandscape) {
             return;
         }
-        final Button secondaryButtonView =
-                getMixin(FooterBarMixin.class).getSecondaryButtonView();
         secondaryButtonView.setBackgroundColor(color);
         if (mRotation == Surface.ROTATION_90) {
             secondaryButtonView.setGravity(Gravity.START);
