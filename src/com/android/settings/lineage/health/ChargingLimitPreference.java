@@ -18,80 +18,65 @@ package com.android.settings.lineage.health;
 
 import android.content.Context;
 import android.util.AttributeSet;
-import android.widget.SeekBar;
-import android.widget.TextView;
 
 import androidx.preference.Preference;
-import androidx.preference.PreferenceViewHolder;
 
 import com.android.internal.lineage.health.HealthInterface;
+import com.android.settingslib.widget.SliderPreference;
 
-import com.android.settings.R;
+public class ChargingLimitPreference extends SliderPreference
+        implements Preference.OnPreferenceChangeListener {
 
-public class ChargingLimitPreference extends Preference
-        implements SeekBar.OnSeekBarChangeListener {
-    private static final String TAG = ChargingLimitPreference.class.getSimpleName();
-
-    private TextView mChargingLimitValue;
-    private SeekBar mChargingLimitBar;
+    private static final int MIN_LIMIT = 70;
+    private static final int MAX_LIMIT = 100;
 
     private final HealthInterface mHealthInterface;
 
     public ChargingLimitPreference(final Context context, final AttributeSet attrs) {
         super(context, attrs);
 
-        setLayoutResource(R.layout.preference_charging_limit);
-
         mHealthInterface = HealthInterface.getInstance(context);
+
+        setMin(MIN_LIMIT);
+        setMax(MAX_LIMIT);
+        setSliderIncrement(1);
+        setTickVisible(true);
+        setShowSliderValue(true);
+        setUpdatesContinuously(true);
+        setHapticFeedbackMode(HAPTIC_FEEDBACK_MODE_ON_TICKS);
+        setLabelFormater(value -> ((int) value) + "%");
+        setOnPreferenceChangeListener(this);
+        setPersistent(false);
     }
 
     @Override
-    public void onBindViewHolder(final PreferenceViewHolder holder) {
-        super.onBindViewHolder(holder);
-
-        mChargingLimitValue = (TextView) holder.findViewById(R.id.value);
-
-        mChargingLimitBar = (SeekBar) holder.findViewById(R.id.seekbar_widget);
-        mChargingLimitBar.setOnSeekBarChangeListener(this);
-
-        int currLimit = getSetting();
-        mChargingLimitBar.setProgress(currLimit);
-        updateValue(currLimit);
+    public boolean onPreferenceChange(final Preference preference, final Object newValue) {
+        final int chargingLimit = (Integer) newValue;
+        setSetting(chargingLimit);
+        setSliderStateDescription(formatPercentage(chargingLimit));
+        return true;
     }
 
     @Override
-    public void onStartTrackingTouch(final SeekBar seekBar) {
-    }
-
-    @Override
-    public void onStopTrackingTouch(final SeekBar seekBar) {
-        setSetting(seekBar.getProgress());
-    }
-
-    @Override
-    public void onProgressChanged(final SeekBar seekBar, final int progress,
-            final boolean fromUser) {
-        updateValue(progress);
-    }
-
     public void setValue(final int value) {
-        if (mChargingLimitBar != null) {
-            mChargingLimitBar.setProgress(value);
-        }
-        updateValue(value);
+        final int chargingLimit = clamp(value);
+        setSliderStateDescription(formatPercentage(chargingLimit));
+        super.setValue(chargingLimit);
     }
 
     protected int getSetting() {
-        return mHealthInterface.getLimit();
+        return clamp(mHealthInterface.getLimit());
     }
 
     protected void setSetting(final int chargingLimit) {
-        mHealthInterface.setLimit(chargingLimit);
+        mHealthInterface.setLimit(clamp(chargingLimit));
     }
 
-    private void updateValue(final int value) {
-        if (mChargingLimitValue != null) {
-            mChargingLimitValue.setText(String.format("%d%%", value));
-        }
+    private int clamp(final int value) {
+        return Math.max(MIN_LIMIT, Math.min(MAX_LIMIT, value));
+    }
+
+    private String formatPercentage(final int value) {
+        return value + "%";
     }
 }
