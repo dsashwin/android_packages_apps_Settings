@@ -16,64 +16,120 @@
 
 package com.android.settings.lineage.health;
 
+import static android.view.HapticFeedbackConstants.CLOCK_TICK;
+
 import android.content.Context;
 import android.util.AttributeSet;
 
 import androidx.preference.Preference;
+import androidx.preference.PreferenceViewHolder;
 
 import com.android.internal.lineage.health.HealthInterface;
-import com.android.settingslib.widget.SliderPreference;
+import com.android.settings.R;
+import com.google.android.material.slider.LabelFormatter;
+import com.google.android.material.slider.Slider;
 
-public class ChargingLimitPreference extends SliderPreference
-        implements Preference.OnPreferenceChangeListener {
+public class ChargingLimitPreference extends Preference
+        implements Slider.OnChangeListener, Slider.OnSliderTouchListener {
 
     private static final int MIN_LIMIT = 70;
-    private static final int MAX_LIMIT = 100;
+    private static final int MAX_LIMIT = 95;
+    private static final int STEP_SIZE = 5;
 
     private final HealthInterface mHealthInterface;
+
+    private Slider mChargingLimitSlider;
+    private int mLastHapticValue = Integer.MIN_VALUE;
 
     public ChargingLimitPreference(final Context context, final AttributeSet attrs) {
         super(context, attrs);
 
+        setLayoutResource(R.layout.preference_charging_limit);
+        setSelectable(false);
+
         mHealthInterface = HealthInterface.getInstance(context);
-
-        setMin(MIN_LIMIT);
-        setMax(MAX_LIMIT);
-        setSliderIncrement(1);
-        setTickVisible(true);
-        setShowSliderValue(true);
-        setUpdatesContinuously(true);
-        setHapticFeedbackMode(HAPTIC_FEEDBACK_MODE_ON_TICKS);
-        setLabelFormater(value -> ((int) value) + "%");
-        setOnPreferenceChangeListener(this);
-        setPersistent(false);
     }
 
     @Override
-    public boolean onPreferenceChange(final Preference preference, final Object newValue) {
-        final int chargingLimit = (Integer) newValue;
+    public void onBindViewHolder(final PreferenceViewHolder holder) {
+        super.onBindViewHolder(holder);
+
+        mChargingLimitSlider = (Slider) holder.findViewById(R.id.slider);
+        if (mChargingLimitSlider == null) {
+            return;
+        }
+
+        final int currentLimit = getSetting();
+
+        mChargingLimitSlider.clearOnChangeListeners();
+        mChargingLimitSlider.clearOnSliderTouchListeners();
+        mChargingLimitSlider.setValueFrom(MIN_LIMIT);
+        mChargingLimitSlider.setValueTo(MAX_LIMIT);
+        mChargingLimitSlider.setStepSize(STEP_SIZE);
+        mChargingLimitSlider.setLabelBehavior(LabelFormatter.LABEL_FLOATING);
+        mChargingLimitSlider.setLabelFormatter(value -> formatPercentage(Math.round(value)));
+        mChargingLimitSlider.setEnabled(isEnabled());
+        mChargingLimitSlider.setValue(currentLimit);
+        mChargingLimitSlider.setStateDescription(formatPercentage(currentLimit));
+        mChargingLimitSlider.addOnChangeListener(this);
+        mChargingLimitSlider.addOnSliderTouchListener(this);
+    }
+
+    @Override
+    public void onValueChange(final Slider slider, final float value, final boolean fromUser) {
+        final int chargingLimit = sanitizeValue(Math.round(value));
+        slider.setStateDescription(formatPercentage(chargingLimit));
+
+        if (!fromUser) {
+            return;
+        }
+
+        if (chargingLimit != mLastHapticValue) {
+            slider.performHapticFeedback(CLOCK_TICK);
+            mLastHapticValue = chargingLimit;
+        }
+
         setSetting(chargingLimit);
-        setSliderStateDescription(formatPercentage(chargingLimit));
-        return true;
     }
 
     @Override
+    public void onStartTrackingTouch(final Slider slider) {
+        mLastHapticValue = sanitizeValue(Math.round(slider.getValue()));
+    }
+
+    @Override
+    public void onStopTrackingTouch(final Slider slider) {
+        final int chargingLimit = sanitizeValue(Math.round(slider.getValue()));
+        slider.setStateDescription(formatPercentage(chargingLimit));
+        setSetting(chargingLimit);
+    }
+
     public void setValue(final int value) {
-        final int chargingLimit = clamp(value);
-        setSliderStateDescription(formatPercentage(chargingLimit));
-        super.setValue(chargingLimit);
+        final int chargingLimit = sanitizeValue(value);
+        if (mChargingLimitSlider != null) {
+            mChargingLimitSlider.setValue(chargingLimit);
+            mChargingLimitSlider.setStateDescription(formatPercentage(chargingLimit));
+        }
     }
 
     protected int getSetting() {
-        return clamp(mHealthInterface.getLimit());
+        final int currentValue = mHealthInterface.getLimit();
+        final int sanitizedValue = sanitizeValue(currentValue);
+        if (sanitizedValue != currentValue) {
+            mHealthInterface.setLimit(sanitizedValue);
+        }
+        return sanitizedValue;
     }
 
     protected void setSetting(final int chargingLimit) {
-        mHealthInterface.setLimit(clamp(chargingLimit));
+        mHealthInterface.setLimit(sanitizeValue(chargingLimit));
     }
 
-    private int clamp(final int value) {
-        return Math.max(MIN_LIMIT, Math.min(MAX_LIMIT, value));
+    private int sanitizeValue(final int value) {
+        final int clampedValue = Math.max(MIN_LIMIT, Math.min(MAX_LIMIT, value));
+        final int snappedOffset = Math.round((clampedValue - MIN_LIMIT) / (float) STEP_SIZE)
+                * STEP_SIZE;
+        return MIN_LIMIT + snappedOffset;
     }
 
     private String formatPercentage(final int value) {
