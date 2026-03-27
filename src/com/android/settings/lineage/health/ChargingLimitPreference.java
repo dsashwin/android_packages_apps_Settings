@@ -16,8 +16,6 @@
 
 package com.android.settings.lineage.health;
 
-import static android.view.HapticFeedbackConstants.CLOCK_TICK;
-
 import android.content.Context;
 import android.util.AttributeSet;
 
@@ -30,7 +28,7 @@ import com.google.android.material.slider.LabelFormatter;
 import com.google.android.material.slider.Slider;
 
 public class ChargingLimitPreference extends Preference
-        implements Slider.OnChangeListener, Slider.OnSliderTouchListener {
+        implements Slider.OnChangeListener {
 
     private static final int MIN_LIMIT = 70;
     private static final int MAX_LIMIT = 95;
@@ -39,7 +37,6 @@ public class ChargingLimitPreference extends Preference
     private final HealthInterface mHealthInterface;
 
     private Slider mChargingLimitSlider;
-    private int mLastHapticValue = Integer.MIN_VALUE;
 
     public ChargingLimitPreference(final Context context, final AttributeSet attrs) {
         super(context, attrs);
@@ -60,72 +57,51 @@ public class ChargingLimitPreference extends Preference
         }
 
         final int currentLimit = getSetting();
+        if (currentLimit != mHealthInterface.getLimit()) {
+            mHealthInterface.setLimit(currentLimit);
+        }
 
         mChargingLimitSlider.clearOnChangeListeners();
-        mChargingLimitSlider.clearOnSliderTouchListeners();
         mChargingLimitSlider.setValueFrom(MIN_LIMIT);
         mChargingLimitSlider.setValueTo(MAX_LIMIT);
         mChargingLimitSlider.setStepSize(STEP_SIZE);
         mChargingLimitSlider.setLabelBehavior(LabelFormatter.LABEL_FLOATING);
         mChargingLimitSlider.setLabelFormatter(value -> formatPercentage(Math.round(value)));
         mChargingLimitSlider.setEnabled(isEnabled());
-        mChargingLimitSlider.setValue(currentLimit);
         mChargingLimitSlider.setStateDescription(formatPercentage(currentLimit));
+        mChargingLimitSlider.setValue(currentLimit);
         mChargingLimitSlider.addOnChangeListener(this);
-        mChargingLimitSlider.addOnSliderTouchListener(this);
     }
 
     @Override
     public void onValueChange(final Slider slider, final float value, final boolean fromUser) {
-        final int chargingLimit = sanitizeValue(Math.round(value));
+        final int chargingLimit = clampToStep(Math.round(value));
         slider.setStateDescription(formatPercentage(chargingLimit));
 
         if (!fromUser) {
             return;
         }
 
-        if (chargingLimit != mLastHapticValue) {
-            slider.performHapticFeedback(CLOCK_TICK);
-            mLastHapticValue = chargingLimit;
-        }
-
-        setSetting(chargingLimit);
-    }
-
-    @Override
-    public void onStartTrackingTouch(final Slider slider) {
-        mLastHapticValue = sanitizeValue(Math.round(slider.getValue()));
-    }
-
-    @Override
-    public void onStopTrackingTouch(final Slider slider) {
-        final int chargingLimit = sanitizeValue(Math.round(slider.getValue()));
-        slider.setStateDescription(formatPercentage(chargingLimit));
         setSetting(chargingLimit);
     }
 
     public void setValue(final int value) {
-        final int chargingLimit = sanitizeValue(value);
+        final int chargingLimit = clampToStep(value);
         if (mChargingLimitSlider != null) {
-            mChargingLimitSlider.setValue(chargingLimit);
             mChargingLimitSlider.setStateDescription(formatPercentage(chargingLimit));
+            mChargingLimitSlider.setValue(chargingLimit);
         }
     }
 
     protected int getSetting() {
-        final int currentValue = mHealthInterface.getLimit();
-        final int sanitizedValue = sanitizeValue(currentValue);
-        if (sanitizedValue != currentValue) {
-            mHealthInterface.setLimit(sanitizedValue);
-        }
-        return sanitizedValue;
+        return clampToStep(mHealthInterface.getLimit());
     }
 
     protected void setSetting(final int chargingLimit) {
-        mHealthInterface.setLimit(sanitizeValue(chargingLimit));
+        mHealthInterface.setLimit(clampToStep(chargingLimit));
     }
 
-    private int sanitizeValue(final int value) {
+    private int clampToStep(final int value) {
         final int clampedValue = Math.max(MIN_LIMIT, Math.min(MAX_LIMIT, value));
         final int snappedOffset = Math.round((clampedValue - MIN_LIMIT) / (float) STEP_SIZE)
                 * STEP_SIZE;
